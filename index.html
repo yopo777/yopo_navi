@@ -9,11 +9,14 @@
 #bar{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:color-mix(in srgb,var(--bg) 88%,transparent)}
 button,select,input[type=text]{font:inherit;padding:8px 10px;border:1px solid #8887;border-radius:8px;background:var(--bg);color:var(--fg)}
 button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+button.up{background:#1e8e3e;color:#fff;border-color:#1e8e3e}
 #view{position:fixed;inset:0;touch-action:none;overflow:hidden}
 #layer{position:absolute;left:0;top:0;transform-origin:0 0}
 #layer img{position:absolute;display:block;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none}
 #me{position:absolute;width:0;height:0;z-index:9999}
 #me{--d:28px}#me i{position:absolute;left:calc(var(--d)/-2);top:calc(var(--d)/-2);width:var(--d);height:var(--d);box-sizing:border-box;border-radius:50%;background:var(--ac);border:calc(var(--d)/7) solid #fff;box-shadow:0 0 0 calc(var(--d)/14) var(--ac)}
+#me svg{display:none;position:absolute;left:calc(var(--d)*-1.1);top:calc(var(--d)*-1.1);width:calc(var(--d)*2.2);height:calc(var(--d)*2.2);filter:drop-shadow(0 1px 2px #0006)}
+#me.arrow svg{display:block}#me.arrow i{display:none}
 #me b{position:absolute;border-radius:50%;background:#1a73e822;border:1px solid #1a73e866}
 #msg{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--bg) 88%,transparent);font-size:13px}
 body.hide #bar,body.hide #msg{display:none}
@@ -29,7 +32,7 @@ body.hide #bar,body.hide #msg{display:none}
  <button id="pick">ロード</button><input id="file" type="file" multiple hidden>
  <select id="gps" title="位置の更新間隔"><option value="0">更新:常時</option><option value="2">更新:2秒</option><option value="3">更新:3秒</option><option value="4">更新:4秒</option><option value="5">更新:5秒</option><option value="10">更新:10秒</option><option value="30">更新:30秒</option><option value="60">更新:1分</option></select>
 </div>
-<div id="view"><div id="layer"><div id="me"><b id="acc"></b><i></i></div></div></div>
+<div id="view"><div id="layer"><div id="me"><b id="acc"></b><i></i><svg viewBox="0 0 100 100"><path d="M50 5 L90 92 L50 72 L10 92 Z" fill="#1a73e8" stroke="#fff" stroke-width="9" stroke-linejoin="round"/></svg></div></div></div>
 <div id="msg">「ロード」で、赤線入りの画像を全部選んでね（複数OK）。mapshot.py で作った画像だよ</div>
 <script>
 onerror=(m)=>{const g=document.getElementById('msg');if(g)g.textContent='エラー: '+m};
@@ -37,8 +40,8 @@ onerror=(m)=>{const g=document.getElementById('msg');if(g)g.textContent='エラ�
 // 基準ズームZ0 = 読み込んだ中でいちばん小さいズーム。画像は 倍率k と中心位置cx から世界座標に置く
 const $=id=>document.getElementById(id);
 let maps=[],Z0=17,O={x:0,y:0},S=1,tx=0,ty=0,pos=null,follow=true,watch=null,mps=.25,latRef=35.8;
-let hdg=null,lastP=null,dotX=0,dotY=0; // hdg: 進む向き(北=0°、時計まわり)。まだ分からないときは null
-try{const v=localStorage.getItem('follow');follow=v===null?true:v==='1';mps=parseFloat(localStorage.getItem('mps'))||.25}catch(e){}
+let mode=2,hdg=null,lastP=null,dotX=0,dotY=0; // mode: 0=オフ 1=北が上でついてくる 2=進む向きが上でついてくる
+try{const v=localStorage.getItem('mode');mode=v===null?2:+v;follow=mode>0;mps=parseFloat(localStorage.getItem('mps'))||.25}catch(e){}
 const wp=(lat,lon,z)=>{const s=256*2**z;return{x:(lon+180)/360*s,y:(.5-Math.log(Math.tan(Math.PI/4+lat*Math.PI/360))/(2*Math.PI))*s}};
 const mpw=lat=>156543.03*Math.cos(lat*Math.PI/180)/2**Z0; // 基準ズームの世界1pxが何mか
 const ANCH=.62; // 向き優先のとき、現在位置を画面の上から何割に置くか
@@ -53,7 +56,7 @@ function parse(t){ // 例: 渋谷ー横浜1_35.8223602_139.9379058_17.39_x1_c184
   return{lat,lon,z,k:kk?+kk[1]:1,cx:cc?+cc[1]:null,label:t.slice(0,at).replace(/[_\s]+$/,'')}}
  return null}
 
-const rotated=()=>follow&&pos&&hdg!==null&&maps.length;
+const rotated=()=>mode===2&&pos&&hdg!==null&&maps.length;
 function toScr(x,y){ // 地図の座標(Z0のpx) → 画面の座標
  if(!rotated())return[tx+x*S,ty+y*S];
  const r=-hdg*Math.PI/180,c=Math.cos(r),s=Math.sin(r),dx=(x-dotX)*S,dy=(y-dotY)*S;
@@ -66,7 +69,7 @@ function cull(){ // 画面の外の画像は表示しない(スマホのメモ�
   if(v!==m.vis){m.vis=v;m.el.style.display=v?'block':'none'}}}
 function apply(){
  $('layer').style.transform=rotated()?`translate(${innerWidth/2}px,${innerHeight*ANCH}px) rotate(${-hdg}deg) scale(${S}) translate(${-dotX}px,${-dotY}px)`:`translate(${tx}px,${ty}px) scale(${S})`;
- $('me').style.transform=`scale(${1/S})`;cull()}
+ $('me').style.transform=`scale(${1/S})`;$('me').classList.toggle('arrow',!!rotated());cull()} // 緑(進む向き)で地図が回っているときだけ、点を上向きの矢印にする
 function center(x,y){tx=innerWidth/2-x*S;ty=innerHeight/2-y*S;apply()}
 function saveScale(){mps=mpw(latRef)/S;try{localStorage.setItem('mps',mps)}catch(e){}}
 function place(){
@@ -115,10 +118,12 @@ $('file').onchange=async e=>{
  const list=[];for(const f of fs){const url=URL.createObjectURL(f),sz=await imgSize(f,url);const base=f.name.replace(/\.[^.]+$/,''),geo=parse(base)||await pngMeta(f);list.push({name:f.name,url,geo,w:sz.w,h:sz.h})}
  build(list);startGPS();
 };
-function setFollow(v){follow=v;$('follow').classList.toggle('on',v);try{localStorage.setItem('follow',v?'1':'0')}catch(e){}if(maps.length)apply()}
-setFollow(follow);
+function setMode(m){mode=m;follow=m>0;const b=$('follow');b.classList.toggle('on',m===1);b.classList.toggle('up',m===2);
+ b.textContent=['ナビ','ナビ:北が上','ナビ:進む向き'][m];try{localStorage.setItem('mode',m)}catch(e){}if(maps.length)apply()}
+const setFollow=v=>{if(!v)setMode(0)}; // ドラッグしたらオフ
+setMode(mode);
 $('me').style.setProperty('--d','16px');
-$('follow').onclick=()=>{setFollow(!follow);place()};
+$('follow').onclick=()=>{setMode((mode+1)%3);place()};
 // 位置の取り方: 0=常時(watchPosition) / N秒=N秒ごとに1回だけ測る(間はGPSを休ませて電池を節約)
 let gpsTimer=null,gpsSec=0;try{gpsSec=parseFloat(localStorage.getItem('gpsSec'))||0}catch(e){}
 //: 現在位置が入っていて、端から一番遠い(=真ん中に近い)もの
