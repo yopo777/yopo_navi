@@ -78,7 +78,7 @@ function place(){
  dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
  const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
  const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
- $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v3';
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v4';
  if(follow)center(x,y)}
 function build(list){
  maps=list.filter(m=>m.geo&&m.w);
@@ -116,7 +116,7 @@ async function pngMeta(f){ // mapshot.py が PNG に埋め込んだ座標(ファ
 $('file').onchange=async e=>{
  const fs=[...e.target.files];if(!fs.length)return;$('msg').textContent='読み込み中…';
  const list=[];for(const f of fs){const url=URL.createObjectURL(f),sz=await imgSize(f,url);const base=f.name.replace(/\.[^.]+$/,''),geo=parse(base)||await pngMeta(f);list.push({name:f.name,url,geo,w:sz.w,h:sz.h})}
- build(list);startGPS();
+ build(list);startGPS();wake();
 };
 function setMode(m){mode=m;follow=m>0;const b=$('follow');b.classList.toggle('on',m===1);b.classList.toggle('up',m===2);
  b.textContent=['ナビ','ナビ:北が上','ナビ:進む向き'][m];try{localStorage.setItem('mode',m)}catch(e){}if(maps.length)apply()}
@@ -150,7 +150,10 @@ function startGPS(){
 }
 $('gps').value=String(gpsSec);
 $('gps').onchange=e=>{gpsSec=parseFloat(e.target.value);try{localStorage.setItem('gpsSec',gpsSec)}catch(x){}if(maps.length)startGPS()};
-document.addEventListener('visibilitychange',()=>{if(!maps.length)return;if(document.hidden)stopGPS();else startGPS()});
+// 画面を消さない(地図を読み込んでいる間、スマホが勝手に画面ロックしない)。画面を戻したときは取り直す
+let wl=null;
+async function wake(){try{if('wakeLock' in navigator&&!document.hidden&&maps.length&&!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null})}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!maps.length)return;if(document.hidden)stopGPS();else{startGPS();wake()}});
 // ドラッグ移動・ピンチズーム
 const pts=new Map();let d0=0,S0=1;
 const V=$('view');
