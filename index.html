@@ -78,7 +78,7 @@ function place(){
  dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
  const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
  const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
- $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`;
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v3';
  if(follow)center(x,y)}
 function build(list){
  maps=list.filter(m=>m.geo&&m.w);
