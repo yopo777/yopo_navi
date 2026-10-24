@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>サイクルナビ</title>
+<style>
+:root{--bg:#f3f1ec;--fg:#1d2a33;--ac:#1a73e8}
+@media(prefers-color-scheme:dark){:root{--bg:#161a1e;--fg:#e8eaed}}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;overscroll-behavior:none}
+#bar{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:color-mix(in srgb,var(--bg) 88%,transparent)}
+button,select,input[type=text]{font:inherit;padding:8px 10px;border:1px solid #8887;border-radius:8px;background:var(--bg);color:var(--fg)}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+#view{position:fixed;inset:0;touch-action:none;overflow:hidden}
+#layer{position:absolute;left:0;top:0;transform-origin:0 0}
+#layer img{position:absolute;display:block;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none}
+#me{position:absolute;width:0;height:0;z-index:9999}
+#me{--d:28px}#me i{position:absolute;left:calc(var(--d)/-2);top:calc(var(--d)/-2);width:var(--d);height:var(--d);box-sizing:border-box;border-radius:50%;background:var(--ac);border:calc(var(--d)/7) solid #fff;box-shadow:0 0 0 calc(var(--d)/14) var(--ac)}
+#me b{position:absolute;border-radius:50%;background:#1a73e822;border:1px solid #1a73e866}
+#msg{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--bg) 88%,transparent);font-size:13px}
+body.hide #bar,body.hide #msg{display:none}
+@media(orientation:landscape) and (max-height:520px){
+ #bar{gap:4px;padding:4px 6px;right:auto;max-width:70%}
+ #bar button,#bar select{padding:3px 8px;font-size:13px;border-radius:6px}
+ #msg{left:auto;right:6px;bottom:4px;max-width:46%;padding:3px 8px;font-size:11px;border-radius:6px}
+}
+
+</style></head><body>
+<div id="bar">
+ <button id="follow">ナビ</button>
+ <button id="pick">ロード</button><input id="file" type="file" multiple hidden>
+ <select id="gps" title="位置の更新間隔"><option value="0">更新:常時</option><option value="2">更新:2秒</option><option value="3">更新:3秒</option><option value="4">更新:4秒</option><option value="5">更新:5秒</option><option value="10">更新:10秒</option><option value="30">更新:30秒</option><option value="60">更新:1分</option></select>
+</div>
+<div id="view"><div id="layer"><div id="me"><b id="acc"></b><i></i></div></div></div>
+<div id="msg">「ロード」で、赤線入りの画像を全部選んでね（複数OK）。mapshot.py で作った画像だよ</div>
+<script>
+onerror=(m)=>{const g=document.getElementById('msg');if(g)g.textContent='エラー: '+m};
+// 読み込んだ地図を全部、緯度経度の場所に並べて1枚の大きな地図にする(切り替えなし)
+// 基準ズームZ0 = 読み込んだ中でいちばん小さいズーム。画像は 倍率k と中心位置cx から世界座標に置く
+const $=id=>document.getElementById(id);
+let maps=[],Z0=17,O={x:0,y:0},S=1,tx=0,ty=0,pos=null,follow=true,watch=null,mps=.25,latRef=35.8;
+let hdg=null,lastP=null,dotX=0,dotY=0; // hdg: 進む向き(北=0°、時計まわり)。まだ分からないときは null
+try{const v=localStorage.getItem('follow');follow=v===null?true:v==='1';mps=parseFloat(localStorage.getItem('mps'))||.25}catch(e){}
+const wp=(lat,lon,z)=>{const s=256*2**z;return{x:(lon+180)/360*s,y:(.5-Math.log(Math.tan(Math.PI/4+lat*Math.PI/360))/(2*Math.PI))*s}};
+const mpw=lat=>156543.03*Math.cos(lat*Math.PI/180)/2**Z0; // 基準ズームの世界1pxが何mか
+const ANCH=.62; // 向き優先のとき、現在位置を画面の上から何割に置くか
+const detail=m=>Math.log2(m.geo.k||1)+m.geo.z; // 詳しさ(大きいほど細かい)
+function parse(t){ // 例: 渋谷ー横浜1_35.8223602_139.9379058_17.39_x1_c1848  (@緯度,経度,ズームz も可)
+ const re=/@(-?\d+\.?\d*),(-?\d+\.?\d*),(\d+(?:\.\d+)?)z|(-?\d{1,3}\.\d+)[_,\s]+(-?\d{1,3}\.\d+)[_,\s]+(\d+(?:\.\d+)?)/g;
+ let m;while((m=re.exec(t))){ // 日本の緯度経度に見えるものだけ採用(名前の中の数字を誤読しない)
+  const at=m.index;re.lastIndex=at+1; // 重なった候補も調べる
+  const lat=+(m[1]??m[4]),lon=+(m[2]??m[5]),z=+(m[3]??m[6]);
+  if(!(lat>20&&lat<50&&lon>120&&lon<155&&z>0&&z<24))continue;
+  const kk=t.match(/_x(\d+(?:\.\d+)?)/),cc=t.match(/_c(\d+(?:\.\d+)?)/);
+  return{lat,lon,z,k:kk?+kk[1]:1,cx:cc?+cc[1]:null,label:t.slice(0,at).replace(/[_\s]+$/,'')}}
+ return null}
+
+const rotated=()=>follow&&pos&&hdg!==null&&maps.length;
+function toScr(x,y){ // 地図の座標(Z0のpx) → 画面の座標
+ if(!rotated())return[tx+x*S,ty+y*S];
+ const r=-hdg*Math.PI/180,c=Math.cos(r),s=Math.sin(r),dx=(x-dotX)*S,dy=(y-dotY)*S;
+ return[innerWidth/2+dx*c-dy*s,innerHeight*ANCH+dx*s+dy*c]}
+function cull(){ // 画面の外の画像は表示しない(スマホのメモリ節約)
+ const W=innerWidth,H=innerHeight;
+ for(const m of maps){const xs=[],ys=[];
+  for(const[x,y]of[[m.X,m.Y],[m.X+m.W,m.Y],[m.X,m.Y+m.H],[m.X+m.W,m.Y+m.H]]){const p=toScr(x-O.x,y-O.y);xs.push(p[0]);ys.push(p[1])}
+  const v=Math.max(...xs)>-50&&Math.max(...ys)>-50&&Math.min(...xs)<W+50&&Math.min(...ys)<H+50;
+  if(v!==m.vis){m.vis=v;m.el.style.display=v?'block':'none'}}}
+function apply(){
+ $('layer').style.transform=rotated()?`translate(${innerWidth/2}px,${innerHeight*ANCH}px) rotate(${-hdg}deg) scale(${S}) translate(${-dotX}px,${-dotY}px)`:`translate(${tx}px,${ty}px) scale(${S})`;
+ $('me').style.transform=`scale(${1/S})`;cull()}
+function center(x,y){tx=innerWidth/2-x*S;ty=innerHeight/2-y*S;apply()}
+function saveScale(){mps=mpw(latRef)/S;try{localStorage.setItem('mps',mps)}catch(e){}}
+function place(){
+ if(!pos||!maps.length){$('me').style.display='none';return}
+ const P=wp(pos.lat,pos.lon,Z0),x=P.x-O.x,y=P.y-O.y;
+ dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
+ const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
+ const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ');
+ if(follow)center(x,y)}
+function build(list){
+ maps=list.filter(m=>m.geo&&m.w);
+ const L=$('layer');L.querySelectorAll('img').forEach(i=>i.remove());
+ const bad=list.length-maps.length;
+ if(!maps.length){$('msg').textContent='座標が読めないよ。mapshot.py で作った画像を選んでね';return}
+ Z0=Math.min(...maps.map(m=>m.geo.z));latRef=maps[0].geo.lat;
+ let x0=1e99,y0=1e99,x1=-1e99,y1=-1e99;
+ for(const m of maps){const g=m.geo,f=2**(Z0-g.z)/(g.k||1),c=wp(g.lat,g.lon,Z0);
+  m.X=c.x-(g.cx??m.w/2)*f;m.Y=c.y-m.h/2*f;m.W=m.w*f;m.H=m.h*f;
+  x0=Math.min(x0,m.X);y0=Math.min(y0,m.Y);x1=Math.max(x1,m.X+m.W);y1=Math.max(y1,m.Y+m.H)}
+ O={x:x0,y:y0}; // 数字が大きくなりすぎないよう、いちばん左上を原点にする
+ maps.sort((a,b)=>detail(a)-detail(b)); // 細かい地図を上に重ねる
+ maps.forEach((m,i)=>{const im=new Image();im.draggable=false;im.src=m.url;
+  im.style.cssText=`left:${m.X-O.x}px;top:${m.Y-O.y}px;width:${m.W}px;height:${m.H}px;z-index:${i+1}`;
+  m.el=im;m.vis=undefined;L.appendChild(im)});
+ S=mpw(latRef)/mps;
+ center((x0+x1)/2-O.x,(y0+y1)/2-O.y);
+ $('msg').textContent=`地図${maps.length}枚を並べたよ`+(bad?`（座標が読めない${bad}枚はスキップ）`:'')+'　位置を待ってるよ';
+ place()}
+$('pick').onclick=()=>$('file').click();
+async function imgSize(f,url){ // 画像の大きさ(PNGは先頭のヘッダーから。ほかは読み込んで調べる)
+ try{const b=new DataView(await f.slice(0,32).arrayBuffer());
+  if(b.getUint32(0)===0x89504e47&&b.getUint32(12)===0x49484452)return{w:b.getUint32(16),h:b.getUint32(20)}}catch(e){}
+ return new Promise(r=>{const i=new Image();i.onload=()=>r({w:i.naturalWidth,h:i.naturalHeight});i.onerror=()=>r({});i.src=url})}
+async function pngMeta(f){ // mapshot.py が PNG に埋め込んだ座標(ファイル名が変わったとき用)
+ try{const b=new Uint8Array(await f.slice(0,16384).arrayBuffer());if(b[0]!==0x89)return null;
+  const dv=new DataView(b.buffer);let p=8;
+  while(p+8<b.length){const len=dv.getUint32(p),type=String.fromCharCode(...b.slice(p+4,p+8));
+   if(type==='IDAT')break;
+   if(type==='tEXt'){const d=b.slice(p+8,p+8+len),i=d.indexOf(0),key=new TextDecoder('latin1').decode(d.slice(0,i));
+    if(key==='cyclenavi'){const v=new TextDecoder('latin1').decode(d.slice(i+1)).split(',').map(Number);
+     return{lat:v[0],lon:v[1],z:v[2],k:v[3]||1,cx:Number.isFinite(v[4])?v[4]:null}}}
+   p+=12+len}}catch(e){}return null}
+$('file').onchange=async e=>{
+ const fs=[...e.target.files];if(!fs.length)return;$('msg').textContent='読み込み中…';
+ const list=[];for(const f of fs){const url=URL.createObjectURL(f),sz=await imgSize(f,url);const base=f.name.replace(/\.[^.]+$/,''),geo=parse(base)||await pngMeta(f);list.push({name:f.name,url,geo,w:sz.w,h:sz.h})}
+ build(list);startGPS();
+};
+function setFollow(v){follow=v;$('follow').classList.toggle('on',v);try{localStorage.setItem('follow',v?'1':'0')}catch(e){}if(maps.length)apply()}
+setFollow(follow);
+$('me').style.setProperty('--d','16px');
+$('follow').onclick=()=>{setFollow(!follow);place()};
+// 位置の取り方: 0=常時(watchPosition) / N秒=N秒ごとに1回だけ測る(間はGPSを休ませて電池を節約)
+let gpsTimer=null,gpsSec=0;try{gpsSec=parseFloat(localStorage.getItem('gpsSec'))||0}catch(e){}
+//: 現在位置が入っていて、端から一番遠い(=真ん中に近い)もの
+function setHeading(p){ // 進む向き: まず端末のGPSの進行方向(動いているとき)。なければ、前の位置からの向き
+ const c=p.coords,sp=c.speed;let t=null;
+ if(Number.isFinite(c.heading)&&(sp==null||sp>=1))t=c.heading;
+ else if(lastP){const dx=(pos.lon-lastP.lon)*Math.cos(pos.lat*Math.PI/180),dy=pos.lat-lastP.lat,d=Math.hypot(dx,dy)*111320;
+  if(d>=Math.max(8,pos.acc)){t=(Math.atan2(dx,dy)*180/Math.PI+360)%360}}
+ if(t===null){if(!lastP)lastP=pos;return} // 止まっている/動きが小さいときは、前の向きのまま
+ lastP=pos;
+ hdg=hdg===null?t:(hdg+((t-hdg+540)%360-180)*.5+360)%360} // 急に回らないよう、半分ずつ近づける
+const onPos=p=>{pos={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};setHeading(p);
+ place()};
+const onErr=e=>$('msg').textContent='位置情報を取れないよ（許可と https を確認）';
+function stopGPS(){if(watch!==null){navigator.geolocation.clearWatch(watch);watch=null}if(gpsTimer){clearInterval(gpsTimer);gpsTimer=null}}
+function startGPS(){
+ stopGPS();
+ if(!navigator.geolocation){$('msg').textContent='このブラウザは位置情報に未対応';return}
+ if(document.hidden)return; // 画面が消えている間は測らない
+ const opt={enableHighAccuracy:true,maximumAge:0,timeout:20000};
+ if(gpsSec===0){watch=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:2000});return}
+ let busy=false;const one=()=>{if(busy)return;busy=true;navigator.geolocation.getCurrentPosition(p=>{busy=false;onPos(p)},e=>{busy=false;onErr(e)},opt)};
+ one();gpsTimer=setInterval(one,gpsSec*1000);
+}
+$('gps').value=String(gpsSec);
+$('gps').onchange=e=>{gpsSec=parseFloat(e.target.value);try{localStorage.setItem('gpsSec',gpsSec)}catch(x){}if(maps.length)startGPS()};
+document.addEventListener('visibilitychange',()=>{if(!maps.length)return;if(document.hidden)stopGPS();else startGPS()});
+// ドラッグ移動・ピンチズーム
+const pts=new Map();let d0=0,S0=1;
+const V=$('view');
+let down=null;
+V.onpointerdown=e=>{V.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);down=pts.size==1?[e.clientX,e.clientY]:null;if(pts.size==2){const[a,b]=[...pts.values()];d0=Math.hypot(a[0]-b[0],a[1]-b[1]);S0=S}};
+V.onpointermove=e=>{
+ if(!pts.has(e.pointerId))return;const o=pts.get(e.pointerId);
+ if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])>8)down=null;
+ if(pts.size==1){tx+=e.clientX-o[0];ty+=e.clientY-o[1];if(follow)setFollow(false)}
+ pts.set(e.pointerId,[e.clientX,e.clientY]);
+ if(pts.size==2){const[a,b]=[...pts.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);
+  follow?zoomAt(innerWidth/2,innerHeight/2,S0*d/d0):zoomAt((a[0]+b[0])/2,(a[1]+b[1])/2,S0*d/d0)}
+ apply();place()};
+V.onpointercancel=e=>{down=null;pts.delete(e.pointerId)};
+V.onpointerup=e=>{if(down&&pts.size==1)document.body.classList.toggle('hide'); // 地図をちょんと触ると、ボタンと文字を隠す/出す
+ if(pts.size==2)saveScale();down=null;pts.delete(e.pointerId)};
+V.onwheel=e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,S*(e.deltaY<0?1.15:1/1.15));apply();place();saveScale()};
+function zoomAt(x,y,n){const m=mpw(latRef);n=Math.min(Math.max(n,m/20),m/.02);tx=x-(x-tx)*n/S;ty=y-(y-ty)*n/S;S=n}
+addEventListener('resize',()=>{if(pos&&follow)place();else cull()});
+</script></body></html>
