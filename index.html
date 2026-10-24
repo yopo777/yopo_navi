@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>サイクルナビ</title>
+<title>yopo_navi</title>
 <style>
 :root{--bg:#f3f1ec;--fg:#1d2a33;--ac:#1a73e8}
 @media(prefers-color-scheme:dark){:root{--bg:#161a1e;--fg:#e8eaed}}
@@ -29,8 +29,8 @@ body.hide #bar,body.hide #msg{display:none}
 </style></head><body>
 <div id="bar">
  <button id="follow">ナビ</button>
- <button id="pick">ロード</button><button id="fs">全画面</button><input id="file" type="file" multiple hidden>
- <select id="gps" title="位置の更新間隔"><option value="0">更新:常時</option><option value="2">更新:2秒</option><option value="3">更新:3秒</option><option value="4">更新:4秒</option><option value="5">更新:5秒</option><option value="10">更新:10秒</option><option value="30">更新:30秒</option><option value="60">更新:1分</option></select>
+ <button id="fs">全画面</button><button id="pick">ロード</button><input id="file" type="file" multiple hidden>
+ <select id="gps" title="位置の更新間隔（更新）"><option value="0">常時</option><option value="2">2秒</option><option value="3">3秒</option><option value="4">4秒</option><option value="5">5秒</option><option value="10">10秒</option><option value="30">30秒</option><option value="60">1分</option></select>
 </div>
 <div id="view"><div id="layer"><div id="me"><b id="acc"></b><i></i><svg viewBox="0 0 100 100"><path d="M50 5 L90 92 L50 72 L10 92 Z" fill="#1a73e8" stroke="#fff" stroke-width="9" stroke-linejoin="round"/></svg></div></div></div>
 <div id="msg">「ロード」で、赤線入りの画像を全部選んでね（複数OK）。mapshot.py で作った画像だよ</div>
@@ -78,7 +78,7 @@ function place(){
  dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
  const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
  const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
- $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v6';
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v7';
  if(follow)center(x,y)}
 function build(list){
  maps=list.filter(m=>m.geo&&m.w);
