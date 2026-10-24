@@ -69,7 +69,7 @@ function cull(){ // 画面の外の画像は表示しない(スマホのメモ�
   if(v!==m.vis){m.vis=v;m.el.style.display=v?'block':'none'}}}
 function apply(){
  $('layer').style.transform=rotated()?`translate(${innerWidth/2}px,${innerHeight*ANCH}px) rotate(${-hdg}deg) scale(${S}) translate(${-dotX}px,${-dotY}px)`:`translate(${tx}px,${ty}px) scale(${S})`;
- $('me').style.transform=`scale(${1/S})`;$('me').classList.toggle('arrow',!!rotated());cull()} // 緑(進む向き)で地図が回っているときだけ、点を上向きの矢印にする
+ $('me').style.transform=`scale(${1/S})`+(rotated()?` rotate(${hdg}deg)`:'');$('me').classList.toggle('arrow',!!rotated());cull()} // 緑(進む向き)で地図が回っているときだけ、点を上向きの矢印にする
 function center(x,y){tx=innerWidth/2-x*S;ty=innerHeight/2-y*S;apply()}
 function saveScale(){mps=mpw(latRef)/S;try{localStorage.setItem('mps',mps)}catch(e){}}
 function place(){
