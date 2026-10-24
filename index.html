@@ -75,7 +75,7 @@ function place(){
  dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
  const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
  const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
- $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ');
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`;
  if(follow)center(x,y)}
 function build(list){
  maps=list.filter(m=>m.geo&&m.w);
@@ -126,7 +126,7 @@ function setHeading(p){ // 進む向き: まず端末のGPSの進行方向(動�
  const c=p.coords,sp=c.speed;let t=null;
  if(Number.isFinite(c.heading)&&(sp==null||sp>=1))t=c.heading;
  else if(lastP){const dx=(pos.lon-lastP.lon)*Math.cos(pos.lat*Math.PI/180),dy=pos.lat-lastP.lat,d=Math.hypot(dx,dy)*111320;
-  if(d>=Math.max(8,pos.acc)){t=(Math.atan2(dx,dy)*180/Math.PI+360)%360}}
+  if(d>=Math.max(6,Math.min(pos.acc,12))){t=(Math.atan2(dx,dy)*180/Math.PI+360)%360}}
  if(t===null){if(!lastP)lastP=pos;return} // 止まっている/動きが小さいときは、前の向きのまま
  lastP=pos;
  hdg=hdg===null?t:(hdg+((t-hdg+540)%360-180)*.5+360)%360} // 急に回らないよう、半分ずつ近づける
