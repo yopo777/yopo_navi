@@ -78,7 +78,7 @@ function place(){
  dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
  const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
  const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
- $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v4';
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v5';
  if(follow)center(x,y)}
 function build(list){
  maps=list.filter(m=>m.geo&&m.w);
@@ -123,7 +123,9 @@ function setMode(m){mode=m;follow=m>0;const b=$('follow');b.classList.toggle('on
 const setFollow=v=>{if(!v)setMode(0)}; // ドラッグしたらオフ
 setMode(mode);
 $('me').style.setProperty('--d','16px');
-$('follow').onclick=()=>{setMode((mode+1)%3);place()};
+$('follow').onclick=()=>{setMode((mode+1)%3);place();
+ // ナビをオンにしたら全画面(アドレバーも時計も消えて、地図が広くなる)。戻すには画面の端から内側へ引っ張る/上の端から下へ引くと一時的に時計が見える
+ if(mode>0&&!document.fullscreenElement){try{document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(()=>{})}catch(e){}}};
 // 位置の取り方: 0=常時(watchPosition) / N秒=N秒ごとに1回だけ測る(間はGPSを休ませて電池を節約)
 let gpsTimer=null,gpsSec=0;try{gpsSec=parseFloat(localStorage.getItem('gpsSec'))||0}catch(e){}
 //: 現在位置が入っていて、端から一番遠い(=真ん中に近い)もの
