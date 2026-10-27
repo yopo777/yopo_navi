@@ -78,7 +78,7 @@ function place(){
  dotX=x;dotY=y;$('me').style.display='block';$('me').style.left=x+'px';$('me').style.top=y+'px';
  const r=pos.acc/mpw(pos.lat)*S,a=$('acc');a.style.width=a.style.height=2*r+'px';a.style.left=a.style.top=-r+'px';
  const inside=maps.some(m=>x>=m.X-O.x&&x<=m.X-O.x+m.W&&y>=m.Y-O.y&&y<=m.Y-O.y+m.H);
- $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v7';
+ $('msg').textContent=`地図${maps.length}枚　`+(inside?`現在位置 精度±${Math.round(pos.acc)}m`:'どの地図にも入ってないよ')+`　向き:${hdg===null?'まだ分からない(動くと出るよ)':Math.round(hdg)+'°'}`+'　v8';
  if(follow)center(x,y)}
 function build(list){
  maps=list.filter(m=>m.geo&&m.w);
@@ -165,7 +165,7 @@ V.onpointerdown=e=>{V.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clie
 V.onpointermove=e=>{
  if(!pts.has(e.pointerId))return;const o=pts.get(e.pointerId);
  if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])>8)down=null;
- if(pts.size==1){tx+=e.clientX-o[0];ty+=e.clientY-o[1];if(follow)setFollow(false)}
+ if(pts.size==1&&!follow){tx+=e.clientX-o[0];ty+=e.clientY-o[1]} // ナビ中は指で動かしても解除しない(走行中の振動や、ふいに触れても大丈夫)。地図を動かしたいときは、ナビボタンで黒(オフ)にする
  pts.set(e.pointerId,[e.clientX,e.clientY]);
  if(pts.size==2){const[a,b]=[...pts.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);
   follow?zoomAt(innerWidth/2,innerHeight/2,S0*d/d0):zoomAt((a[0]+b[0])/2,(a[1]+b[1])/2,S0*d/d0)}
